@@ -3,3 +3,5 @@
 *.png
 *.jpg
 /note
+__pycache__/
+*.pyc
