@@ -1,7 +1,7 @@
 import gc
 import torch
 
-from dataset import buildingTensors  # Rimosso import errato
+from dataset import buildingTensors
 from models import CVAE
 from train import train_cvae
 from evaluate import generate_counterfactuals, plot_and_print_impact_matrix
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     print(f"Training...")
 
-    model = train_cvae(model, X_train, Y_train, epochs=100, device=device)
+    model = train_cvae(model, X_train, Y_train, epochs=30, device=device)
 
     y_fact, y_cf, y_true, impact = generate_counterfactuals(
         model, X_test, Y_test, norm_stats, device=device

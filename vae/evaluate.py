@@ -13,15 +13,18 @@ def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
     fgmt_test = X_test[:, model.pp_dim:]
 
     with torch.no_grad():
-        mu_z, _ = model.encoder(Y_test, pp_test)
+        sensitivity = model.decoder.get_sensitivity(pp_test)
+        y_dyn_test = Y_test - sensitivity * fgmt_test
+        
+        mu_z, _ = model.encoder(y_dyn_test, pp_test)
         z = mu_z
-        mu_fact, _, _ = model.decoder(z, pp_test, fgmt_test)
 
-        fgmt_zero = torch.full_like(
-            fgmt_test, float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"])
-        )
+        mu_fact, _, _ = model.decoder(z, pp_test, fgmt_test)
+        
+        fgmt_zero = torch.full_like(fgmt_test, float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"]))
         mu_cf, _, _ = model.decoder(z, pp_test, fgmt_zero)
 
+    # Denormalization
     y_factual = mu_fact.cpu().numpy() * norm_stats["tg_std"]
     y_counterfactual = mu_cf.cpu().numpy() * norm_stats["tg_std"]
     y_true = Y_test.cpu().numpy() * norm_stats["tg_std"]
@@ -29,6 +32,7 @@ def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
     climate_impact = y_factual - y_counterfactual
 
     return y_factual, y_counterfactual, y_true, climate_impact
+
 
 
 def plot_and_print_impact_matrix(

@@ -16,8 +16,8 @@ class Encoder(nn.Module):
         self.fc_mu = nn.Linear(hidden_dim, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
 
-    def forward(self, y, pp):
-        h = self.fc(torch.cat([y, pp], dim=-1))
+    def forward(self, y_dyn, pp):
+        h = self.fc(torch.cat([y_dyn, pp], dim=-1))
         mu = self.fc_mu(h)
         logvar = torch.clamp(self.fc_logvar(h), min=-10.0, max=10.0)
         return mu, logvar
@@ -36,18 +36,22 @@ class Decoder(nn.Module):
         self.out_mu_dyn = nn.Linear(hidden_dim, tg_dim)
         self.out_logvar = nn.Linear(hidden_dim, tg_dim)
         
+        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 0.8)
         self.fc_sensitivity = nn.Sequential(
             nn.Linear(pp_dim, hidden_dim // 2),
             nn.SiLU(),
             nn.Linear(hidden_dim // 2, tg_dim)
         )
 
+    def get_sensitivity(self, pp):
+        return F.softplus(self.base_sensitivity + 0.1 * self.fc_sensitivity(pp))
+
     def forward(self, z, pp, fgmt):
         h_dyn = self.fc_dynamic(torch.cat([z, pp], dim=-1))
         mu_dyn = self.out_mu_dyn(h_dyn)
         logvar_y = torch.clamp(self.out_logvar(h_dyn), min=-8.0, max=4.0)
 
-        sensitivity = F.softplus(self.fc_sensitivity(pp))
+        sensitivity = self.get_sensitivity(pp)
         mu_forced = sensitivity * fgmt
         mu_total = mu_dyn + mu_forced
 
@@ -69,7 +73,13 @@ class CVAE(nn.Module):
     def forward(self, y, x):
         pp = x[:, :self.pp_dim]
         fgmt = x[:, self.pp_dim:]
-        mu_z, logvar_z = self.encoder(y, pp)
+
+        sensitivity = self.decoder.get_sensitivity(pp)
+        
+        y_dyn = y - sensitivity * fgmt
+
+        mu_z, logvar_z = self.encoder(y_dyn, pp)
         z = self.reparameterize(mu_z, logvar_z)
-        mu_y, logvar_y, sensitivity = self.decoder(z, pp, fgmt)
+
+        mu_y, logvar_y, _ = self.decoder(z, pp, fgmt)
         return mu_y, logvar_y, mu_z, logvar_z

@@ -85,7 +85,10 @@ def data_preparation(x1, y1, x2, y2, output_path="vae_dataset.nc"):
         .weighted(weights)
         .mean(dim=("latitude", "longitude"))
     )
-    fGMT = gmt_monthly.ewm(span=60, adjust=False).mean() # exponential mobbile mean
+
+    fGMT_vals = gmt_monthly.to_series().ewm(span=60, adjust=False).mean().values
+    fGMT = xr.DataArray(fGMT_vals, coords={"time": gmt_monthly.time}, dims=["time"])# exponential mobbile mean
+
     ds_hadcrut.close()
     del ds_hadcrut, weights, gmt_monthly
     gc.collect()
