@@ -5,3 +5,4 @@
 /note
 __pycache__/
 *.pyc
+.pml_env/
