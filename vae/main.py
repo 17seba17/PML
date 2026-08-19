@@ -1,7 +1,7 @@
 import gc
 import torch
 
-from dataset import buildingTensors, temporal_train_test_split
+from dataset import buildingTensors  # Rimosso import errato
 from models import CVAE
 from train import train_cvae
 from evaluate import generate_counterfactuals, plot_and_print_impact_matrix
@@ -11,23 +11,25 @@ if __name__ == "__main__":
 
     print(f"Creating tensors...")
     
-    X, Y, tg_dim, pp_dim, cond_dim, norm_stats, ds = buildingTensors(
-        "vae_dataset.nc"
-    )
-    
-    print(f"Splitting data...")
+    (
+        X_train,
+        Y_train,
+        X_test,
+        Y_test,
+        tg_dim,
+        pp_dim,
+        cond_dim,
+        norm_stats,
+        ds,
+    ) = buildingTensors("vae_dataset.nc", split_year=2005)
 
-    train_mask, test_mask = temporal_train_test_split(ds, split_year=2005)
-    X_train, Y_train = X[train_mask], Y[train_mask]
-    X_test, Y_test = X[test_mask], Y[test_mask]
+    print(f"Train samples: {len(X_train)} | Test samples: {len(X_test)}")
+    print(f"tg_dim: {tg_dim}, pp_dim: {pp_dim}")
 
-    del X, Y
-    gc.collect()
-
-    print(f"Creating CVAE...")
+    print(f"Creating CVAE on device: {device}...")
 
     model = CVAE(
-        tg_dim=tg_dim, cond_dim=cond_dim, hidden_dim=128, latent_dim=20
+        tg_dim=tg_dim, pp_dim=pp_dim, hidden_dim=128, latent_dim=20
     )
 
     print(f"Training...")

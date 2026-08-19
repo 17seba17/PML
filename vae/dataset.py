@@ -8,64 +8,129 @@ import numpy as np
 import torch
 
 
-def buildingTensors(file_path="vae_dataset.nc"):
+def buildingTensors(file_path="vae_dataset.nc", split_year=2000):
     ds = xr.open_dataset(file_path)
-    N_time = ds.sizes["time"]
+    train_mask = ds.time.dt.year <= split_year
+    test_mask = ds.time.dt.year > split_year
 
-    # temperature anomaly
-    tg_climatology = ds["tg"].groupby("time.dayofyear").mean(dim="time")
-    tg_anomalies = (ds["tg"].groupby("time.dayofyear") - tg_climatology)
+    ds_train = ds.isel(time=train_mask)
+    ds_test = ds.isel(time=test_mask)
 
-    tg_raw = tg_anomalies.values.astype(np.float32)
-    tg_dim = tg_raw.shape[1]
-
-    tg_std = tg_raw.std(axis=0, keepdims=True) + 1e-6
-    tg_raw /= tg_std
-
-
-
-
-    # building Y
-
-    nan_tg = np.isnan(tg_raw).sum()
-    if nan_tg>0:
-        print(f"dataset is NOT valid")
-
-
-    Y = torch.from_numpy(tg_raw)
-    del tg_raw, tg_anomalies
+    del train_mask, test_mask
     gc.collect()
 
-    # pressure anomaly
+    N_train = ds_train.sizes["time"]
+    N_test = ds_test.sizes["time"]
 
-    pp_climatology = ds["pp"].groupby("time.dayofyear").mean(dim="time")
-    pp_anomalies = (ds["pp"].groupby("time.dayofyear") - pp_climatology)
+    # temperature
 
-    pp_raw = pp_anomalies.values.astype(np.float32)
-    pp_dim = pp_raw.shape[1]
+    tg_clim = ds_train["tg"].groupby("time.dayofyear").mean(dim="time")
+
+    ## anomaly 
+
+    tg_anom_train = (
+        ds_train["tg"].groupby("time.dayofyear") - tg_clim
+    ).values.astype(np.float32)
+    tg_anom_test = (
+        ds_test["tg"].groupby("time.dayofyear") - tg_clim
+    ).values.astype(np.float32)
+
+    tg_dim = tg_anom_train.shape[1]
+
+
+    ## normalization 
+
+    tg_std = tg_anom_train.std(axis=0, keepdims=True) + 1e-6
+    tg_train_norm = tg_anom_train / tg_std
+    tg_test_norm = tg_anom_test / tg_std
+
+    ## building Y
+
+    Y_train = torch.from_numpy(tg_train_norm)
+    Y_test = torch.from_numpy(tg_test_norm)
+
+
+    ## cleaning
+
+    nan = np.isnan(tg_train_norm).sum()+np.isnan(tg_test_norm).sum()
+    if nan>0:
+        print(f"dataset is NOT valid")
+        sys.exit(1)
+
+    del tg_anom_train, tg_anom_test, tg_train_norm, tg_test_norm
+    gc.collect()
+
+
+
+    # pressure
+
+    pp_clim = ds_train["pp"].groupby("time.dayofyear").mean(dim="time")
+
+
+    ## anomaly
+
+    pp_anom_train = (
+        ds_train["pp"].groupby("time.dayofyear") - pp_clim
+    ).values.astype(np.float32)
+    pp_anom_test = (
+        ds_test["pp"].groupby("time.dayofyear") - pp_clim
+    ).values.astype(np.float32)
+
+    pp_dim = pp_anom_train.shape[1]
     cond_dim = pp_dim + 1
 
-    pp_std = pp_raw.std(axis=0, keepdims=True) + 1e-6
-    pp_raw /= pp_std
+    ## normalization
 
-    # normalization of fGMT
-    fgmt_raw = ds["fgmt"].values.reshape(N_time, 1).astype(np.float32)
-    fgmt_mean = fgmt_raw.mean(axis=0, keepdims=True)
-    fgmt_std = fgmt_raw.std(axis=0, keepdims=True) + 1e-6
-    fgmt_raw -= fgmt_mean
-    fgmt_raw /= fgmt_std
+    pp_std = pp_anom_train.std(axis=0, keepdims=True) + 1e-6
+
+    pp_train_norm = pp_anom_train / pp_std
+    pp_test_norm = pp_anom_test / pp_std
+
+    ## cleaning
+    nan = np.isnan(pp_train_norm).sum()+np.isnan(pp_test_norm).sum()
+    if nan>0:
+        print(f"dataset is NOT valid")
+        sys.exit(1)
+    del pp_anom_train, pp_anom_test
+    gc.collect()
+
+
+    #  fGMT
+
+    fgmt_train_raw = ds_train["fgmt"].values.reshape(N_train, 1).astype(np.float32)
+    fgmt_test_raw = ds_test["fgmt"].values.reshape(N_test, 1).astype(np.float32)
+
+    ## normalization
+
+    fgmt_mean = fgmt_train_raw.mean(axis=0, keepdims=True)
+    fgmt_std = fgmt_train_raw.std(axis=0, keepdims=True) + 1e-6
+
+    fgmt_train_norm = (fgmt_train_raw - fgmt_mean) / fgmt_std
+    fgmt_test_norm = (fgmt_test_raw - fgmt_mean) / fgmt_std
+
+    ## cleaning
+    nan = np.isnan(fgmt_train_norm).sum()+np.isnan(fgmt_test_norm).sum()
+    if nan>0:
+        print(f"dataset is NOT valid")
+        sys.exit(1)
+    del fgmt_train_raw, fgmt_test_raw
+    gc.collect()
 
     # building X
-    X_mat = np.concatenate([pp_raw, fgmt_raw], axis=1)
-    X = torch.from_numpy(X_mat)
+    X_train_mat = np.concatenate([pp_train_norm, fgmt_train_norm], axis=1)
+    X_test_mat = np.concatenate([pp_test_norm, fgmt_test_norm], axis=1)
 
-    nan_pp = np.isnan(pp_raw).sum()
-    nan_fgmt = np.isnan(fgmt_raw).sum()
-    if nan_pp>0 or nan_fgmt>0:
-        print(f"dataset is NOT valid")
+    X_train = torch.from_numpy(X_train_mat)
+    X_test = torch.from_numpy(X_test_mat)
 
-
-    del pp_raw, fgmt_raw, X_mat
+    del (
+        pp_train_norm,
+        pp_test_norm,
+        fgmt_train_norm,
+        fgmt_test_norm,
+        X_train_mat,
+        X_test_mat,
+    )
     gc.collect()
 
     # norm stats
@@ -76,11 +141,15 @@ def buildingTensors(file_path="vae_dataset.nc"):
         "fgmt_std": fgmt_std.squeeze(),
     }
 
-    return X, Y, tg_dim, pp_dim, cond_dim, norm_stats, ds
 
-
-def temporal_train_test_split(ds, split_year=2000):
-    train_mask = (ds.time.dt.year <= split_year).values
-    test_mask = (ds.time.dt.year > split_year).values
-
-    return train_mask, test_mask
+    return (
+        X_train,
+        Y_train,
+        X_test,
+        Y_test,
+        tg_dim,
+        pp_dim,
+        cond_dim,
+        norm_stats,
+        ds,
+    )

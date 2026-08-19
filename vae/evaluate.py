@@ -4,25 +4,25 @@ import torch
 
 
 def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
+    model = model.to(device)
     model.eval()
     X_test = X_test.to(device)
     Y_test = Y_test.to(device)
 
+    pp_test = X_test[:, :model.pp_dim]
+    fgmt_test = X_test[:, model.pp_dim:]
+
     with torch.no_grad():
-        mu, logvar = model.encoder(Y_test, X_test)
-        z = mu
+        mu_z, _ = model.encoder(Y_test, pp_test)
+        z = mu_z
+        mu_fact, _, _ = model.decoder(z, pp_test, fgmt_test)
+        
+        fgmt_zero = torch.full_like(fgmt_test, float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"]))
+        mu_cf, _, _ = model.decoder(z, pp_test, fgmt_zero)
 
-        y_pred_fact_norm = model.decoder(z, X_test).cpu().numpy()
-
-        X_test_cf = X_test.clone()
-        fgmt_zero_norm = (0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"]
-        X_test_cf[:, -1] = torch.tensor(fgmt_zero_norm, dtype=torch.float32)
-
-        y_pred_cf_norm = model.decoder(z, X_test_cf).cpu().numpy()
-
-    # Denormalize anomalies back to °C (scale by standard deviation)
-    y_factual = y_pred_fact_norm * norm_stats["tg_std"]
-    y_counterfactual = y_pred_cf_norm * norm_stats["tg_std"]
+    # Denormalizzazione (CORRETTO: blocco unico)
+    y_factual = mu_fact.cpu().numpy() * norm_stats["tg_std"]
+    y_counterfactual = mu_cf.cpu().numpy() * norm_stats["tg_std"]
     y_true = Y_test.cpu().numpy() * norm_stats["tg_std"]
 
     climate_impact = y_factual - y_counterfactual

@@ -3,15 +3,17 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 
-def vae_loss_function(y_recon, y, mu, logvar, beta=1e-3):
+def vae_loss_function(mu_y, logvar_y, y_true, mu_z, logvar_z, beta=1e-3):
     # reconstruction error
-    recon_loss = nn.functional.mse_loss(y_recon, y, reduction="mean")
+    var_y = torch.exp(logvar_y)
+    recon_nll = 0.5 * torch.sum(logvar_y + ((y_true - mu_y) ** 2) / var_y, dim=-1).mean()
 
-    # KL divergence
-    kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    # KL Divergence
+    kl_div = -0.5 * torch.sum(1 + logvar_z - mu_z.pow(2) - logvar_z.exp(), dim=-1).mean()
 
-    # total loss
-    return recon_loss + beta * kl_loss, recon_loss, kl_loss
+    # total 
+    total_loss = recon_nll + beta * kl_div
+    return total_loss, recon_nll, kl_div
 
 
 def train_cvae(
@@ -36,9 +38,11 @@ def train_cvae(
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
             optimizer.zero_grad()
-            y_recon, mu, logvar = model(batch_y, batch_x)
+            
+            mu_y, logvar_y, mu_z, logvar_z = model(batch_y, batch_x)
+            
             loss, recon, kl = vae_loss_function(
-                y_recon, batch_y, mu, logvar, beta=beta
+                mu_y, logvar_y, batch_y, mu_z, logvar_z, beta=beta
             )
 
             loss.backward()
@@ -50,6 +54,6 @@ def train_cvae(
             total_kl += kl.item() * len(batch_x)
 
         N = len(X_train)
-        print(f"Epoch [{epoch+1}/{epochs}] | Loss: {total_loss/N:.4f} | MSE: {total_recon/N:.4f} | KL: {total_kl/N:.4f}")
+        print(f"Epoch [{epoch+1}/{epochs}] | Loss: {total_loss/N:.4f} | NLL: {total_recon/N:.4f} | KL: {total_kl/N:.4f}")
 
     return model
