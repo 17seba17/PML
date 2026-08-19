@@ -16,11 +16,12 @@ def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
         mu_z, _ = model.encoder(Y_test, pp_test)
         z = mu_z
         mu_fact, _, _ = model.decoder(z, pp_test, fgmt_test)
-        
-        fgmt_zero = torch.full_like(fgmt_test, float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"]))
+
+        fgmt_zero = torch.full_like(
+            fgmt_test, float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"])
+        )
         mu_cf, _, _ = model.decoder(z, pp_test, fgmt_zero)
 
-    # Denormalizzazione (CORRETTO: blocco unico)
     y_factual = mu_fact.cpu().numpy() * norm_stats["tg_std"]
     y_counterfactual = mu_cf.cpu().numpy() * norm_stats["tg_std"]
     y_true = Y_test.cpu().numpy() * norm_stats["tg_std"]
@@ -70,9 +71,10 @@ def plot_and_print_impact_matrix(
 
         plt.figure(figsize=(10, 8))
 
-        limit = max(abs(np.nanmin(mean_impact_1d)), abs(np.nanmax(mean_impact_1d)), 0.5)
+        vmax = max(float(np.nanpercentile(mean_impact_1d, 98)), 0.5)
+        vmin = 0.0
 
-        cmap = plt.cm.RdBu_r.copy()
+        cmap = plt.cm.Reds.copy()
         cmap.set_bad(color="lightgray")
 
         im = plt.imshow(
@@ -80,8 +82,8 @@ def plot_and_print_impact_matrix(
             origin="lower",
             extent=[lon_grid.min(), lon_grid.max(), lat_grid.min(), lat_grid.max()],
             cmap=cmap,
-            vmin=-limit,
-            vmax=limit,
+            vmin=vmin,
+            vmax=vmax,
         )
 
         cbar = plt.colorbar(im, fraction=0.046, pad=0.04)
@@ -94,7 +96,7 @@ def plot_and_print_impact_matrix(
         plt.tight_layout()
         plt.savefig(output_path, dpi=300)
         print(f"Graph successfully saved to: '{output_path}'")
-        plt.show()
+        plt.close()
 
     else:
         print(f"\n1D Dataset | Mean Climate Impact: {mean_impact_1d.mean():.2f} °C")

@@ -3,15 +3,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 
-def vae_loss_function(mu_y, logvar_y, y_true, mu_z, logvar_z, beta=1e-3):
-    # reconstruction error
+def vae_loss_function(mu_y, logvar_y, y_true, mu_z, logvar_z, beta=1e-2):
     var_y = torch.exp(logvar_y)
-    recon_nll = 0.5 * torch.sum(logvar_y + ((y_true - mu_y) ** 2) / var_y, dim=-1).mean()
+    
+    recon_nll = 0.5 * torch.mean(logvar_y + ((y_true - mu_y) ** 2) / var_y)
 
-    # KL Divergence
-    kl_div = -0.5 * torch.sum(1 + logvar_z - mu_z.pow(2) - logvar_z.exp(), dim=-1).mean()
+    kl_div = -0.5 * torch.mean(1 + logvar_z - mu_z.pow(2) - logvar_z.exp())
 
-    # total 
     total_loss = recon_nll + beta * kl_div
     return total_loss, recon_nll, kl_div
 
@@ -23,7 +21,7 @@ def train_cvae(
     epochs=100,
     batch_size=64,
     lr=1e-3,
-    beta=1e-3,
+    beta=1e-1,
     device="cpu",
 ):
     model.to(device)
