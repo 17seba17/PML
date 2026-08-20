@@ -35,8 +35,8 @@ pytz==2026.3.post1
 scipy==1.13.1
 six==1.17.0
 sympy==1.13.1
-torch @ file:///mnt/c/Users/sshuser/Desktop/torch-2.5.1%252Bcu121-cp39-cp39-linux_x86_64.whl
 triton==3.1.0
+torch==2.5.1
 typing-extensions==4.16.0
 tzdata==2026.3
 xarray==2024.7.0

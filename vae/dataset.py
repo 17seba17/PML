@@ -22,6 +22,23 @@ def buildingTensors(file_path="vae_dataset.nc", split_year=2000):
     N_train = ds_train.sizes["time"]
     N_test = ds_test.sizes["time"]
 
+    # 1D -> 2D
+
+    n_lat = ds.attrs["orig_n_lat"]
+    n_lon = ds.attrs["orig_n_lon"]
+    lat_grid = np.array(ds.attrs["lat_grid"])
+    lon_grid = np.array(ds.attrs["lon_grid"])
+    lats = ds["lat"].values
+    lons = ds["lon"].values
+
+    lat_indices = np.abs(lat_grid[:, None] - lats).argmin(axis=0)
+    lon_indices = np.abs(lon_grid[:, None] - lons).argmin(axis=0)
+
+    spatial_mask_2d = np.zeros((n_lat, n_lon), dtype=bool)
+    spatial_mask_2d[lat_indices, lon_indices] = True
+    spatial_mask_tensor = torch.from_numpy(spatial_mask_2d)
+
+
     # temperature
 
     tg_clim = ds_train["tg"].groupby("time.dayofyear").mean(dim="time")
@@ -142,6 +159,7 @@ def buildingTensors(file_path="vae_dataset.nc", split_year=2000):
     }
 
 
+
     return (
         X_train,
         Y_train,
@@ -151,5 +169,6 @@ def buildingTensors(file_path="vae_dataset.nc", split_year=2000):
         pp_dim,
         cond_dim,
         norm_stats,
+        spatial_mask_tensor,
         ds,
     )
