@@ -2,6 +2,7 @@
 *.nc
 *.png
 *.jpg
+*.gif
 /note
 __pycache__/
 *.pyc
