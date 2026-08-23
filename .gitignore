@@ -6,3 +6,7 @@
 __pycache__/
 *.pyc
 .pml_env/
+*.gif
+*.log
+output
+*.out

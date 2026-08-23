@@ -36,7 +36,7 @@ class Decoder(nn.Module):
         self.out_mu_dyn = nn.Linear(hidden_dim, tg_dim)
         self.out_logvar = nn.Linear(hidden_dim, tg_dim)
         
-        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 0.8)
+        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 10.0)
         self.fc_sensitivity = nn.Sequential(
             nn.Linear(pp_dim, hidden_dim // 2),
             nn.SiLU(),
@@ -76,7 +76,7 @@ class CVAE(nn.Module):
 
         sensitivity = self.decoder.get_sensitivity(pp)
         
-        y_dyn = y - sensitivity * fgmt
+        y_dyn = y - sensitivity.detach() * fgmt
 
         mu_z, logvar_z = self.encoder(y_dyn, pp)
         z = self.reparameterize(mu_z, logvar_z)
