@@ -28,15 +28,15 @@ if __name__ == "__main__":
         cond_dim,
         norm_stats,
         ds,
-    ) = buildingTensors("alpi.nc", split_year=2005)
+    ) = buildingTensors("vae_dataset.nc", split_year=2005)
 
     print(f"Instantiating single CVAE on device: {device} | Total points: {tg_dim}...")
-    model = CVAE(tg_dim=tg_dim, pp_dim=pp_dim, hidden_dim=512, latent_dim=8).to(device)
+    model = CVAE(tg_dim=tg_dim, pp_dim=pp_dim, hidden_dim=128, latent_dim=16).to(device)
 
     sensitivity_params = [model.decoder.base_sensitivity,*model.decoder.fc_sensitivity.parameters()]
     sensitivity_ids = set(map(id, sensitivity_params))
     general_params = [p for p in model.parameters() if id(p) not in sensitivity_ids]
-    optimizer = torch.optim.Adam([{'params': general_params, 'lr': lr},{'params': sensitivity_params, 'lr': lr * 0.5}])
+    optimizer = torch.optim.Adam([{'params': general_params, 'lr': lr},{'params': sensitivity_params, 'lr': 0.5*lr}])
     dataset = TensorDataset(X_train, Y_train)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 

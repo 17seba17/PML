@@ -36,7 +36,7 @@ class Decoder(nn.Module):
         self.out_mu_dyn = nn.Linear(hidden_dim, tg_dim)
         self.out_logvar = nn.Linear(hidden_dim, tg_dim)
         
-        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 10.0)
+        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 0.8)
         self.fc_sensitivity = nn.Sequential(
             nn.Linear(pp_dim, hidden_dim // 2),
             nn.SiLU(),
