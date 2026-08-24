@@ -2,6 +2,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+def compute_physical_sensitivity_stats(model, X_test, norm_stats, device="cpu"):
+    model.eval()
+    X_test = X_test.to(device)
+    pp_test = X_test[:, :model.pp_dim]
+    with torch.no_grad():
+        sens_norm = model.decoder.get_sensitivity(pp_test).cpu().numpy()
+        sens_norm_1d = np.mean(sens_norm, axis=0)
+    tg_std = norm_stats["tg_std"]
+    if isinstance(tg_std, torch.Tensor):
+        tg_std = tg_std.cpu().numpy()
+    fgmt_std = float(norm_stats["fgmt_std"])
+    sens_phys = sens_norm_1d * (tg_std / fgmt_std)
+    mean_s = float(np.mean(sens_phys))
+    std_s = float(np.std(sens_phys))
+    min_s = float(np.min(sens_phys))
+    max_s = float(np.max(sens_phys))
+    return mean_s, std_s, min_s, max_s, sens_phys
+
+
 
 def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
     model = model.to(device)

@@ -3,15 +3,21 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 
-def vae_loss_function(mu_y, logvar_y, y_true, mu_z, logvar_z, beta=1e-2):
-    var_y = torch.exp(logvar_y)
-    
-    recon_nll = 0.5 * torch.mean(torch.sum(logvar_y + ((y_true - mu_y) ** 2) / var_y, dim=-1))
+def vae_loss_function(    mu_y, logvar_y, y_true, mu_z, logvar_z, sensitivity, beta=0.1, target_mu_norm=0.05530, target_std_norm=0.01053, lambda_moments=150.0 ):
+    var_y = torch.exp(logvar_y)    
+#    recon_nll = 0.5 * torch.mean(torch.sum(logvar_y + ((y_true - mu_y) ** 2) / var_y, dim=-1))
+    recon_nll = 0.5 * torch.mean(logvar_y + ((y_true - mu_y) ** 2) / var_y)
+#    kl_div = -0.5 * torch.mean(torch.sum(1 + logvar_z - mu_z.pow(2) - logvar_z.exp(), dim=-1))
+    kl_div = -0.5 * torch.mean(1 + logvar_z - mu_z.pow(2) - logvar_z.exp())
 
-    kl_div = -0.5 * torch.mean(torch.sum(1 + logvar_z - mu_z.pow(2) - logvar_z.exp(), dim=-1))
-
-    total_loss = recon_nll + beta * kl_div
+    sens_mean = torch.mean(sensitivity)
+    sens_std = torch.std(sensitivity)
+    loss_mean = (sens_mean - target_mu_norm) ** 2
+    loss_std = (sens_std - target_std_norm) ** 2
+    moment_loss = loss_mean + loss_std
+    total_loss = recon_nll + beta * kl_div + lambda_moments * moment_loss
     return total_loss, recon_nll, kl_div
+
 
 
 
@@ -38,10 +44,10 @@ def train_cvae(
 
             optimizer.zero_grad()
             
-            mu_y, logvar_y, mu_z, logvar_z = model(batch_y, batch_x)
+            mu_y, logvar_y, mu_z, logvar_z, sensitivity = model(batch_y, batch_x)
             
             loss, recon, kl = vae_loss_function(
-                mu_y, logvar_y, batch_y, mu_z, logvar_z, beta=beta
+                mu_y, logvar_y, batch_y, mu_z, logvar_z, sensitivity, beta=beta
             )
 
             loss.backward()

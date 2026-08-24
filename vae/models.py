@@ -36,7 +36,7 @@ class Decoder(nn.Module):
         self.out_mu_dyn = nn.Linear(hidden_dim, tg_dim)
         self.out_logvar = nn.Linear(hidden_dim, tg_dim)
         
-        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * 0.8)
+        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * (-2.8672)) # the impact is high softplus(0.542)=1
         self.fc_sensitivity = nn.Sequential(
             nn.Linear(pp_dim, hidden_dim // 2),
             nn.SiLU(),
@@ -82,4 +82,4 @@ class CVAE(nn.Module):
         z = self.reparameterize(mu_z, logvar_z)
 
         mu_y, logvar_y, _ = self.decoder(z, pp, fgmt)
-        return mu_y, logvar_y, mu_z, logvar_z
+        return mu_y, logvar_y, mu_z, logvar_z, sensitivity
