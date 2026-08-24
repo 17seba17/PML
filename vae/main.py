@@ -9,6 +9,7 @@ from dataset import buildingTensors
 from models import CVAE
 from train import vae_loss_function
 from evaluate import generate_counterfactuals, save_impact_frame, compute_physical_sensitivity_stats
+from scale import scale
 
 if __name__ == "__main__":
     epochs = 100
@@ -30,13 +31,25 @@ if __name__ == "__main__":
         ds,
     ) = buildingTensors("balcani.nc", split_year=2005)
 
-    print(f"Instantiating single CVAE on device: {device} | Total points: {tg_dim}...")
-    model = CVAE(tg_dim=tg_dim, pp_dim=pp_dim, hidden_dim=128, latent_dim=50).to(device)
+    target_mu_norm, target_std_norm, base_sens_init = scale(norm_stats)
 
-    sensitivity_params = [model.decoder.base_sensitivity,*model.decoder.fc_sensitivity.parameters()]
+    print(f"Instantiating single CVAE on device: {device} | Total points: {tg_dim}...")
+    model = CVAE(
+        tg_dim=tg_dim, 
+        pp_dim=pp_dim, 
+        hidden_dim=128, 
+        latent_dim=20, 
+        base_sensitivity=base_sens_init
+    ).to(device)
+
+    sensitivity_params = [model.decoder.base_sensitivity, *model.decoder.fc_sensitivity.parameters()]
     sensitivity_ids = set(map(id, sensitivity_params))
     general_params = [p for p in model.parameters() if id(p) not in sensitivity_ids]
-    optimizer = torch.optim.Adam([{'params': general_params, 'lr': lr},{'params': sensitivity_params, 'lr': 0.1*lr}])
+    optimizer = torch.optim.Adam([
+        {'params': general_params, 'lr': lr},
+        {'params': sensitivity_params, 'lr': 0.1 * lr}
+    ])
+    
     dataset = TensorDataset(X_train, Y_train)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -52,8 +65,15 @@ if __name__ == "__main__":
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
             optimizer.zero_grad()
 
-            mu_y, logvar_y, mu_z, logvar_z , sensitivity= model(batch_y, batch_x)
-            loss, recon, kl = vae_loss_function(mu_y, logvar_y, batch_y, mu_z, logvar_z, sensitivity, beta=beta)
+            mu_y, logvar_y, mu_z, logvar_z, sensitivity = model(batch_y, batch_x)
+            
+            loss, recon, kl = vae_loss_function(
+                mu_y, logvar_y, batch_y, mu_z, logvar_z, sensitivity,
+                beta=beta,
+                target_mu_norm=target_mu_norm,
+                target_std_norm=target_std_norm,
+                lambda_moments=150.0
+            )
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -64,15 +84,20 @@ if __name__ == "__main__":
             total_kl += kl.item() * len(batch_x)
 
         epoch_loss = total_loss / len(X_train)
-#        print(f"Epoch [{epoch:03d}/{epochs:03d}] | Loss: {epoch_loss:.4f} | Generating frame...")
+        
         mean_s, std_s, min_s, max_s, _ = compute_physical_sensitivity_stats(model, X_test, norm_stats, device=device)
-        print(f"Epoch [{epoch:03d}/{epochs:03d}] | Loss: {epoch_loss:.4f} | "
-              f"Sens Fisico: {mean_s:.4f} ± {std_s:.4f} °C/°C (Min: {min_s:.2f}, Max: {max_s:.2f})")
+        
+        y_fact, _, y_true, impact = generate_counterfactuals(model, X_test, Y_test, norm_stats, device=device)
+                test_rmse_celsius = np.sqrt(np.mean((y_true - y_fact) ** 2))
 
-        _, _, _, impact = generate_counterfactuals(model, X_test, Y_test, norm_stats, device=device)
-        frame_name = f"frames/frame_{epoch:03d}.png"
-        save_impact_frame(impact, ds, epoch, epochs, epoch_loss, frame_name, vmin=0.0, vmax=3.5)
-        frame_paths.append(frame_name)
+        print(f"Epoch [{epoch:03d}/{epochs:03d}] | Train Loss: {epoch_loss:.4f} | "
+              f"Test RMSE: {test_rmse_celsius:.2f} °C | "
+              f"Sens: {mean_s:.2f} ± {std_s:.2f} °C/°C (Min: {min_s:.2f}, Max: {max_s:.2f})")
+
+
+        #frame_name = f"frames/frame_{epoch:03d}.png"
+        #save_impact_frame(impact, ds, epoch, epochs, epoch_loss, frame_name, vmin=0.0, vmax=2.0)
+        #frame_paths.append(frame_name)
 
     print("\nAssembling all 100 frames into 'climate_evolution.gif'...")
     images = [Image.open(f) for f in frame_paths]

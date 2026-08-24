@@ -24,7 +24,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, pp_dim, tg_dim, hidden_dim=128):
+    def __init__(self, latent_dim, pp_dim, tg_dim, hidden_dim=128, base_sensitivity=0.8):
         super().__init__()
         self.fc_dynamic = nn.Sequential(
             nn.Linear(latent_dim + pp_dim, hidden_dim),
@@ -35,8 +35,8 @@ class Decoder(nn.Module):
         )
         self.out_mu_dyn = nn.Linear(hidden_dim, tg_dim)
         self.out_logvar = nn.Linear(hidden_dim, tg_dim)
-        
-        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * (-2.8672)) # the impact is high softplus(0.542)=1
+
+        self.base_sensitivity = nn.Parameter(torch.ones(tg_dim) * base_sensitivity)
         self.fc_sensitivity = nn.Sequential(
             nn.Linear(pp_dim, hidden_dim // 2),
             nn.SiLU(),
@@ -59,11 +59,11 @@ class Decoder(nn.Module):
 
 
 class CVAE(nn.Module):
-    def __init__(self, tg_dim, pp_dim, hidden_dim=128, latent_dim=20):
+    def __init__(self, tg_dim, pp_dim, hidden_dim=128, latent_dim=20, base_sensitivity=0.8):
         super().__init__()
         self.pp_dim = pp_dim
         self.encoder = Encoder(tg_dim, pp_dim, hidden_dim, latent_dim)
-        self.decoder = Decoder(latent_dim, pp_dim, tg_dim, hidden_dim)
+        self.decoder = Decoder(latent_dim, pp_dim, tg_dim, hidden_dim, base_sensitivity)
 
     def reparameterize(self, mu, logvar):
         sigma = torch.exp(0.5 * logvar)
@@ -75,7 +75,6 @@ class CVAE(nn.Module):
         fgmt = x[:, self.pp_dim:]
 
         sensitivity = self.decoder.get_sensitivity(pp)
-        
         y_dyn = y - sensitivity.detach() * fgmt
 
         mu_z, logvar_z = self.encoder(y_dyn, pp)
