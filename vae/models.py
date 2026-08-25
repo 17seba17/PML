@@ -44,7 +44,7 @@ class Decoder(nn.Module):
         )
 
     def get_sensitivity(self, pp):
-        return F.softplus(self.base_sensitivity + 0.1 * self.fc_sensitivity(pp))
+        return F.softplus(self.base_sensitivity +  self.fc_sensitivity(pp))
 
     def forward(self, z, pp, fgmt):
         h_dyn = self.fc_dynamic(torch.cat([z, pp], dim=-1))
@@ -55,7 +55,7 @@ class Decoder(nn.Module):
         mu_forced = sensitivity * fgmt
         mu_total = mu_dyn + mu_forced
 
-        return mu_total, logvar_y, sensitivity
+        return mu_total, logvar_y, sensitivity, mu_dyn
 
 
 class CVAE(nn.Module):
@@ -80,5 +80,5 @@ class CVAE(nn.Module):
         mu_z, logvar_z = self.encoder(y_dyn, pp)
         z = self.reparameterize(mu_z, logvar_z)
 
-        mu_y, logvar_y, _ = self.decoder(z, pp, fgmt)
-        return mu_y, logvar_y, mu_z, logvar_z, sensitivity
+        mu_y, logvar_y, _, mu_dyn = self.decoder(z, pp, fgmt)
+        return mu_y, logvar_y, mu_z, logvar_z, sensitivity, mu_dyn

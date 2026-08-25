@@ -38,13 +38,13 @@ def generate_counterfactuals(model, X_test, Y_test, norm_stats, device="cpu"):
         mu_z, _ = model.encoder(y_dyn_test, pp_test)
         z = mu_z
 
-        mu_fact, _, _ = model.decoder(z, pp_test, fgmt_test)
+        mu_fact, _, _, _ = model.decoder(z, pp_test, fgmt_test)
 
         fgmt_zero = torch.full_like(
             fgmt_test,
             float((0.0 - norm_stats["fgmt_mean"]) / norm_stats["fgmt_std"]),
         )
-        mu_cf, _, _ = model.decoder(z, pp_test, fgmt_zero)
+        mu_cf, _, _, _ = model.decoder(z, pp_test, fgmt_zero)
 
     y_factual = mu_fact.cpu().numpy() * norm_stats["tg_std"]
     y_counterfactual = mu_cf.cpu().numpy() * norm_stats["tg_std"]
@@ -74,26 +74,36 @@ def save_impact_frame(climate_impact, ds, epoch, total_epochs, loss, output_path
         lat_grid = lat_grid[::-1]
         impact_matrix = impact_matrix[::-1, :]
 
+    valid_data = impact_matrix[~np.isnan(impact_matrix)]
+    if len(valid_data) > 0:
+        dyn_vmin = float(np.nanmin(impact_matrix))
+        dyn_vmax = float(np.nanmax(impact_matrix))
+        if dyn_vmin == dyn_vmax:
+            dyn_vmin -= 0.1
+            dyn_vmax += 0.1
+    else:
+        dyn_vmin, dyn_vmax = 0.0, 1.0
     plt.figure(figsize=(9, 7.5))
     cmap = plt.cm.Reds.copy()
     cmap.set_bad(color="lightgray")
-
     im = plt.imshow(
         impact_matrix,
         origin="lower",
         extent=[lon_grid.min(), lon_grid.max(), lat_grid.min(), lat_grid.max()],
         cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-    )
-
+        vmin=dyn_vmin,
+        vmax=dyn_vmax,
+        )
     cbar = plt.colorbar(im, fraction=0.046, pad=0.04)
     cbar.set_label("Climate Impact: $T_{factual} - T_{counterfactual}$ [°C]", size=11)
-
-    plt.title(f"CVAE Climate Attribution Evolution — Epoch {epoch:03d}/{total_epochs:03d} (Loss: {loss:.3f})", fontsize=12, fontweight="bold")
-    plt.xlabel("Longitude", fontsize=11)
-    plt.ylabel("Latitude", fontsize=11)
-
+    plt.title(
+        f"CVAE Climate Attribution — Epoch {epoch:03d}/{total_epochs:03d}\n"
+        f"Loss: {loss:.3f} | Dynamic Range: [{dyn_vmin:.2f} °C, {dyn_vmax:.2f} °C]",
+        fontsize=11,
+        fontweight="bold"
+    )
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     plt.close()
+
+

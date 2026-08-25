@@ -3,11 +3,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 def vae_loss_function(
-    mu_y, logvar_y, y_true, mu_z, logvar_z, sensitivity, 
+    mu_y, logvar_y, y_true, mu_z, logvar_z, sensitivity, mu_dyn,
     beta=0.1, 
     target_mu_norm=0.05530, 
     target_std_norm=0.01053, 
-    lambda_moments=150.0
+    lambda_moments=150.0,
+    lambda_dyn=10.0
+
 ):
     var_y = torch.exp(logvar_y)
     recon_nll = 0.5 * torch.mean(logvar_y + ((y_true - mu_y) ** 2) / var_y)
@@ -19,7 +21,10 @@ def vae_loss_function(
     loss_std = (sens_std - target_std_norm) ** 2
     moment_loss = loss_mean + loss_std
 
-    total_loss = recon_nll + beta * kl_div + lambda_moments * moment_loss
+    dyn_loss = torch.mean(mu_dyn) ** 2
+
+    total_loss = recon_nll + beta * kl_div + lambda_moments * moment_loss + lambda_dyn * dyn_loss
+
     return total_loss, recon_nll, kl_div
 
 
