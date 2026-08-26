@@ -106,7 +106,7 @@ def init_experiment(args):
     
     control_data = {
         "action": "run",
-        "active_anchors": list(anchors_info.keys())[:1],
+        "active_anchors": list(anchors_info.keys()),
         "description": "Edita 'active_anchors' per scegliere quali addestrare contemporaneamente (es. ['0_0', '50_50']). Metti 'action':'stop' per fermare."
     }
     write_json(os.path.join(exp_dir, "control.json"), control_data)
@@ -166,7 +166,8 @@ def resume_experiment(args):
             anchor_dir = os.path.join(exp_dir, "checkpoints", anchor_id)
 
             if anchor_id not in active_sessions:
-                distances = np.sqrt((lat_indices - info["i0"]) ** 2 + (lon_indices - info["j0"]) ** 2)
+                distances = np.maximum(np.abs(lat_indices - info["i0"]), np.abs(lon_indices - info["j0"]))
+
                 idx = np.where(distances <= config["radius"])[0]
 
                 Y_tile = Y_train[:, idx]

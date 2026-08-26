@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 def vae_loss_function(
     mu_y, logvar_y, y_true, mu_z, logvar_z, sensitivity, mu_dyn,
-    beta=, 
+    beta, 
     target_mu_norm, 
     target_std_norm, 
     lambda_moments,
