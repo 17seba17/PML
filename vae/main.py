@@ -35,12 +35,17 @@ if __name__ == "__main__":
         cond_dim,
         norm_stats,
         ds,
-    ) = buildingTensors("balcani.nc", split_year=split_year)
+    ) = buildingTensors("vae_dataset.nc", split_year=split_year)
 
-    # 1. Calcolo empirico dei target di sensitività (Filtro 5 anni HadCRUT + E-OBS)
     target_mu_norm, target_std_norm, base_sens_init = scale(
-        norm_stats
+        norm_stats,
+        lat_min=ds.attrs["lat_min"],
+        lat_max=ds.attrs["lat_max"],
+        lon_min=ds.attrs["lon_min"],
+        lon_max=ds.attrs["lon_max"],
+        split_year=split_year
     )
+
 
     print(f"Instantiating CVAE | Total spatial points: {tg_dim}...")
     model = CVAE(
@@ -51,7 +56,6 @@ if __name__ == "__main__":
         base_sensitivity=base_sens_init
     ).to(device)
 
-    # 2. Ottimizzatore: la base_sensitivity ha un LR protetto, il resto della rete (inclusa fc_sensitivity) va a LR pieno
     base_param = [model.decoder.base_sensitivity]
     base_id = set(map(id, base_param))
     general_params = [p for p in model.parameters() if id(p) not in base_id]
@@ -61,7 +65,6 @@ if __name__ == "__main__":
         {'params': base_param, 'lr': 0.1 * lr}
     ])
 
-    # 3. Scheduler con T_max = epochs // 4 (il learning rate scende prima per stabilizzare i pesi)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, 
         T_max=max(1, epochs // 4), 
@@ -84,10 +87,8 @@ if __name__ == "__main__":
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
             optimizer.zero_grad()
 
-            # Forward pass che restituisce anche mu_dyn
             mu_y, logvar_y, mu_z, logvar_z, sensitivity, mu_dyn = model(batch_y, batch_x)
 
-            # Calcolo della Loss con vincolo fisico e vincolo di media zero sulla dinamica
             loss, recon, kl = vae_loss_function(
                 mu_y, logvar_y, batch_y, mu_z, logvar_z, sensitivity, mu_dyn,
                 beta=beta,
@@ -111,7 +112,6 @@ if __name__ == "__main__":
         epoch_loss = total_loss / len(X_train)
         scheduler.step()
 
-        # Valutazione del Test Set
         mean_s, std_s, min_s, max_s, _ = compute_physical_sensitivity_stats(
             model, X_test, norm_stats, device=device
         )
@@ -128,7 +128,6 @@ if __name__ == "__main__":
             f"Pendenza: {epoch_grad_norm:.4f}"
         )
 
-        # Salvataggio frame per la GIF
         frame_name = f"frames/frame_{epoch:03d}.png"
         save_impact_frame(
             impact, ds, epoch, epochs, epoch_loss, frame_name, vmin=0.0, vmax=2.0
